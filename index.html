@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+    <title>Abyssal Current — Quest 3</title>
+    <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
+    <style>
+      html, body { margin:0; width:100%; height:100%; background:#02090d; font-family:system-ui,sans-serif; }
+      .tip { position:fixed; left:50%; bottom:22px; transform:translateX(-50%); color:#d9eff5; background:#061d27dd; border:1px solid #3d8999; border-radius:9px; padding:9px 13px; text-align:center; z-index:2; max-width:80vw; font-size:14px; }
+    </style>
+  </head>
+  <body>
+    <div class="tip" id="tip">Войдите в VR. Наведите луч на рычаг и зажмите триггер, затем двигайтесь стиком.</div>
+    <a-scene renderer="colorManagement:true; physicallyCorrectLights:true" vr-mode-ui="enabled:true" background="color:#020a10" fog="type:linear; color:#061c27; near:8; far:72" abyss-game>
+      <a-assets>
+        <a-mixin id="metal" material="color:#263a40; metalness:.85; roughness:.32"></a-mixin>
+      </a-assets>
+
+      <a-entity light="type:ambient; color:#4c93a6; intensity:.35"></a-entity>
+      <a-entity light="type:directional; color:#78c8d3; intensity:.55" position="-5 9 -4"></a-entity>
+
+      <!-- Ocean floor and wreckage -->
+      <a-plane rotation="-90 0 0" width="360" height="360" material="color:#0a3136; roughness:1" position="0 -4 0"></a-plane>
+      <a-entity id="world">
+        <a-entity position="0 -3.2 -18" geometry="primitive:icosahedron; radius:2.9; detail:2" material="color:#174953; roughness:1"></a-entity>
+        <a-entity position="-9 -3.4 -28" geometry="primitive:cone; radiusBottom:4; radiusTop:1.2; height:7; segmentsRadial:8" material="color:#123b43; roughness:1"></a-entity>
+        <a-entity position="10 -3.4 -33" geometry="primitive:cone; radiusBottom:5; radiusTop:.8; height:9; segmentsRadial:7" material="color:#16454b; roughness:1"></a-entity>
+        <a-entity position="5 -2.8 -16" rotation="12 25 8">
+          <a-box width="5" height="1.4" depth="2.2" material="color:#3e4c43; roughness:.8"></a-box>
+          <a-cylinder radius=".75" height="2.5" rotation="90 0 0" position="-1.6 0 -1.2" material="color:#76694a; roughness:.8"></a-cylinder>
+        </a-entity>
+        <a-entity id="fish" position="-3 -1.6 -13" animation="property:position; from:-8 -1.6 -13; to:8 -1.6 -13; dur:9000; loop:true; easing:linear">
+          <a-sphere scale=".7 .35 .32" material="color:#d59d4d; emissive:#321b06; emissiveIntensity:.4"></a-sphere><a-cone radius-bottom=".28" radius-top="0" height=".7" rotation="0 0 90" position="-.65 0 0" material="color:#d59d4d"></a-cone>
+        </a-entity>
+      </a-entity>
+
+      <!-- fixed camera rig: world moves, cabin/camera never tilts -->
+      <a-entity id="rig" position="0 0 0">
+        <a-camera id="camera" position="0 0 0" look-controls="magicWindowTrackingEnabled:false"></a-camera>
+
+        <!-- The cabin is a sibling of the camera, never a child: it stays put when the player turns their head. -->
+        <a-entity id="cabin" position="0 0 0">
+          <!-- Porthole frame blocks peripheral cabin view -->
+          <a-torus radius="2.25" radius-tubular=".24" rotation="0 0 0" position="0 .05 -1.25" material="color:#1d2b2d; metalness:.9; roughness:.25"></a-torus>
+          <a-circle radius="2.07" position="0 .05 -1.29" material="color:#021319; opacity:.46; transparent:true; side:back"></a-circle>
+          <a-box width="8" height="1.25" depth="2" position="0 -2.55 -1" material="color:#172326; roughness:.65"></a-box>
+          <a-text id="hud" value="БАТАРЕЯ 100%" align="center" width="2.3" color="#bceeff" position="0 1.4 -1.4"></a-text>
+          <a-text id="pressure" value="БАЛЛАСТ: 0 м" align="center" width="1.7" color="#95bdc4" position="0 1.12 -1.4"></a-text>
+
+          <!-- Small warm cabin lamps: low intensity avoids lighting the ocean unrealistically. -->
+          <a-entity light="type:point; color:#ffb35b; intensity:.75; distance:3.5; decay:2" position="-1.8 .95 -.55"></a-entity>
+          <a-entity light="type:point; color:#ffb35b; intensity:.75; distance:3.5; decay:2" position="1.8 .95 -.55"></a-entity>
+          <a-sphere radius=".09" position="-1.8 .95 -.55" material="color:#ffb35b; emissive:#ff7a22; emissiveIntensity:1.5"></a-sphere>
+          <a-sphere radius=".09" position="1.8 .95 -.55" material="color:#ffb35b; emissive:#ff7a22; emissiveIntensity:1.5"></a-sphere>
+          <a-entity light="type:point; color:#f29a50; intensity:.32; distance:2.4; decay:2" position="0 -.35 .45"></a-entity>
+        </a-entity>
+
+        <!-- Navigation stick: controller thumbstick only activates while trigger is held over it -->
+        <a-entity id="nav-console" position="0 -1.05 -1.18">
+          <a-box width="1.65" height=".35" depth=".75" mixin="metal"></a-box>
+          <a-cylinder radius=".16" height=".65" position="0 .42 0" rotation="-12 0 0" mixin="metal" class="clickable" id="nav-stick"></a-cylinder>
+          <a-sphere radius=".2" position="0 .76 -.08" material="color:#d15c32; metalness:.65; roughness:.25" class="clickable" id="nav-knob"></a-sphere>
+          <a-text value="НАВИГАЦИЯ" align="center" width="1.15" color="#a8d7d9" position="0 .08 .39" rotation="-70 0 0"></a-text>
+        </a-entity>
+
+        <!-- Ballast wheels on each side -->
+        <a-entity position="-1.35 -.72 -1.12" rotation="0 0 14">
+          <a-cylinder radius=".36" height=".16" rotation="90 0 0" mixin="metal" class="clickable" id="ballast-up"></a-cylinder>
+          <a-text value="ПОДЪЁМ" align="center" width=".75" color="#c2e8e9" position="0 -.03 .12"></a-text>
+        </a-entity>
+        <a-entity position="1.35 -.72 -1.12" rotation="0 0 -14">
+          <a-cylinder radius=".36" height=".16" rotation="90 0 0" mixin="metal" class="clickable" id="ballast-down"></a-cylinder>
+          <a-text value="ПОГРУЖ." align="center" width=".75" color="#c2e8e9" position="0 -.03 .12"></a-text>
+        </a-entity>
+
+        <!-- rear dynamo: turn it with right thumbstick while holding trigger on handle -->
+        <a-entity id="dynamo" position="0 .2 1.15" rotation="0 180 0">
+          <a-box width="1.25" height=".8" depth=".55" mixin="metal"></a-box>
+          <a-cylinder radius=".32" height=".78" rotation="90 0 0" position="0 .15 -.4" material="color:#4d652b; metalness:.45; roughness:.55"></a-cylinder>
+          <a-entity id="dynamo-handle" class="clickable" position=".7 .15 -.58">
+            <a-cylinder radius=".055" height="1.35" rotation="0 0 90" material="color:#dfb04d; metalness:.75; roughness:.3"></a-cylinder>
+            <a-sphere radius=".12" position=".67 0 0" material="color:#dfb04d"></a-sphere>
+          </a-entity>
+          <a-text value="ДИНАМО • 10 ОБОРОТОВ" align="center" width="1.8" color="#d6eddb" position="0 .72 -.3"></a-text>
+        </a-entity>
+
+        <a-entity id="leftHand" laser-controls="hand:left" raycaster="objects:.clickable; far:4" cursor="rayOrigin:entity; fuse:false"></a-entity>
+        <a-entity id="rightHand" laser-controls="hand:right" raycaster="objects:.clickable; far:4" cursor="rayOrigin:entity; fuse:false"></a-entity>
+      </a-entity>
+    </a-scene>
+
+    <script>
+      AFRAME.registerComponent('abyss-game', {
+        init() {
+          const scene = this.el, world = document.querySelector('#world'), rig = document.querySelector('#rig');
+          const hud = document.querySelector('#hud'), pressure = document.querySelector('#pressure'), tip = document.querySelector('#tip');
+          let battery = 100, depth = 0, navHeld = false, dynamoHeld = false, thrust = {x:0,y:0};
+          let dynTurns = 0, lastAngle = null, chargeCycles = 0;
+          const rayTarget = hand => {
+            const hit = hand.components.raycaster && hand.components.raycaster.intersections[0];
+            return hit && hit.object.el && hit.object.el.id;
+          };
+          const setTip = text => tip.textContent = text;
+          const press = hand => {
+            const target = rayTarget(hand);
+            if (target === 'nav-stick' || target === 'nav-knob') { navHeld = true; setTip('Навигация активна: удерживайте триггер и двигайте левый стик.'); }
+            if (target === 'dynamo-handle') { dynamoHeld = true; lastAngle = null; setTip('Крутите правый стик по кругу: ' + Math.floor(dynTurns) + '/10'); }
+            if (target === 'ballast-up') { depth = Math.min(0, depth + 1); }
+            if (target === 'ballast-down') { depth = Math.max(-9, depth - 1); }
+          };
+          const release = () => { navHeld = false; dynamoHeld = false; lastAngle = null; thrust = {x:0,y:0}; };
+          [document.querySelector('#leftHand'), document.querySelector('#rightHand')].forEach(h => {
+            h.addEventListener('triggerdown', () => press(h)); h.addEventListener('triggerup', release);
+            h.addEventListener('thumbstickmoved', e => {
+              if (navHeld) thrust = {x:e.detail.x, y:e.detail.y};
+              if (dynamoHeld && h.id === 'rightHand') {
+                const a = Math.atan2(e.detail.y, e.detail.x);
+                if (lastAngle !== null) { let d = a-lastAngle; if (d > Math.PI) d -= 2*Math.PI; if (d < -Math.PI) d += 2*Math.PI; dynTurns += Math.abs(d)/(2*Math.PI); }
+                lastAngle = a;
+              }
+            });
+          });
+          window.addEventListener('keydown', e => {
+            if (e.code === 'Space') navHeld = true;
+            if (e.key === 'w') thrust.y = -1; if (e.key === 's') thrust.y = 1; if (e.key === 'a') thrust.x = -1; if (e.key === 'd') thrust.x = 1;
+            if (e.key === 'q') depth = Math.min(0, depth+1); if (e.key === 'e') depth = Math.max(-9, depth-1);
+          });
+          window.addEventListener('keyup', e => { if (['w','a','s','d'].includes(e.key)) thrust={x:0,y:0}; if (e.code==='Space') navHeld=false; });
+          this.tick = (time, dt) => {
+            const sec = Math.min(dt || 16, 80) / 1000;
+            if (navHeld && battery > 0) { world.object3D.position.x -= thrust.x * sec * 2.3; world.object3D.position.z += thrust.y * sec * 2.3; battery = Math.max(0, battery - sec * (1.0 + (Math.abs(thrust.x)+Math.abs(thrust.y))*.75)); }
+            world.object3D.position.y += ((depth - world.object3D.position.y) * sec * .65);
+            if (dynTurns >= 10) { battery = Math.min(100, battery + 42); dynTurns = 0; chargeCycles++; setTip('Заряд получен. Динамо: ' + chargeCycles + ' раз(а).'); }
+            const p = Math.round(battery); hud.setAttribute('value', 'БАТАРЕЯ ' + p + '%' + (p < 20 ? ' — НИЗКИЙ ЗАРЯД' : ''));
+            hud.setAttribute('color', p < 20 ? '#ff8d76' : '#bceeff'); pressure.setAttribute('value', 'БАЛЛАСТ: ' + Math.round(-world.object3D.position.y) + ' м');
+            const handle = document.querySelector('#dynamo-handle'); handle.object3D.rotation.z = dynTurns * Math.PI * 2;
+          };
+        }
+      });
+    </script>
+  </body>
+</html>
