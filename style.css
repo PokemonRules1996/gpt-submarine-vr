@@ -1,0 +1,17 @@
+:root { color-scheme: dark; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+* { box-sizing: border-box; }
+body { margin: 0; overflow: hidden; background: #02090d; color: #ffdda0; }
+canvas { display:block; }
+#hud { position:fixed; z-index:3; left:20px; top:18px; width:min(420px, calc(100vw - 40px)); text-shadow:0 2px 4px #000; pointer-events:none; }
+.title { letter-spacing:.13em; font-weight:800; color:#ffe0a5; font-size:15px; }
+.title span { color:#8fa0a0; font-weight:400; }
+.meter { margin-top:14px; display:flex; align-items:center; gap:9px; font-size:12px; }
+.bar { height:10px; width:180px; border:1px solid #e1a94c; padding:1px; background:#261a09; }
+#charge { height:100%; width:100%; background:linear-gradient(90deg,#dd3e2a,#f8c34c,#fff0a9); transition:width .15s; }
+#charge-value { min-width:38px; }
+p { color:#c7d4d0; font-size:12px; line-height:1.4; max-width:390px; }
+.hint { opacity:.65; }
+#enter-vr { position:fixed; z-index:4; right:20px; bottom:20px; border:1px solid #f6ba54; background:#573511; color:#fff1cf; padding:12px 18px; border-radius:4px; font:700 13px ui-monospace, monospace; cursor:pointer; letter-spacing:.05em; }
+#enter-vr:hover { background:#88541a; }
+#crosshair { position:fixed; left:50%; top:50%; z-index:2; transform:translate(-50%,-50%); color:#f8d690; font-size:20px; opacity:.8; pointer-events:none; }
+body.vr #hud, body.vr #enter-vr, body.vr #crosshair { display:none; }
