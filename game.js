@@ -81,6 +81,9 @@ const dust = new THREE.Points(particles, new THREE.PointsMaterial({color:0x6eaeb
 
 // Cockpit attached to the vehicle, with a genuine opening in the front bulkhead.
 const cabin = new THREE.Group(); player.add(cabin);
+// Compact dimensions: controls sit within a relaxed seated reach in a Quest play space.
+cabin.scale.setScalar(.55);
+cabin.position.y=.3;
 const yellow = 0xc68122, darkYellow = 0x5b3510;
 box(cabin,[6,.16,6],[0,-.05,-1.5],darkYellow);
 box(cabin,[6,.16,6],[0,3.4,-1.5],darkYellow);
@@ -130,12 +133,14 @@ const dynLabel = new THREE.Mesh(new THREE.PlaneGeometry(.82,.18),new THREE.MeshB
 const raycaster = new THREE.Raycaster();
 const tempMatrix = new THREE.Matrix4();
 const controllers = {};
-function attachController(hand) {
-  const c = renderer.xr.getController(hand === 'left' ? 0 : 1); c.userData.hand=hand; scene.add(c);
+const controllerList = [];
+function attachController(index) {
+  const c = renderer.xr.getController(index); c.userData.hand=''; controllerList.push(c); scene.add(c);
   const ray = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-3)]),new THREE.LineBasicMaterial({color:0xffd382})); ray.name='ray'; ray.scale.z=.6; c.add(ray);
-  c.addEventListener('selectstart', () => select(c)); c.addEventListener('selectend', () => release(c)); controllers[hand]=c;
+  c.addEventListener('connected', event => { c.userData.hand=event.data.handedness; c.userData.inputSource=event.data; controllers[event.data.handedness]=c; });
+  c.addEventListener('disconnected', () => { release(c); c.userData.inputSource=null; });
 }
-attachController('left'); attachController('right');
+attachController(0); attachController(1);
 function select(controller) {
   tempMatrix.identity().extractRotation(controller.matrixWorld); raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld); raycaster.ray.direction.set(0,0,-1).applyMatrix4(tempMatrix);
   const hit=raycaster.intersectObjects(interactables,false)[0];
@@ -146,6 +151,15 @@ function select(controller) {
   if(hit.object.userData.kind==='dynamo') { dynamoHeld=true; dynamoController=controller; previousCrankAngle=null; }
 }
 function release(controller) { const held=controller.userData.held; if(held==='lever'){ if(controller.userData.heldSide==='right')rightHeld=false; else leftHeld=false; } if(held==='dynamo'){dynamoHeld=false; dynamoController=null; previousCrankAngle=null;} controller.userData.held=null; }
+function updateThumbGrabs() {
+  for (const controller of controllerList) {
+    const button=controller.userData.inputSource?.gamepad?.buttons?.[3];
+    const pressed=Boolean(button?.pressed);
+    if (pressed && !controller.userData.thumbWasPressed) select(controller);
+    if (!pressed && controller.userData.thumbWasPressed) release(controller);
+    controller.userData.thumbWasPressed=pressed;
+  }
+}
 function stick(hand) {
   const session=renderer.xr.getSession(); if(!session) return [0,0];
   const source=[...session.inputSources].find(s=>s.handedness===hand && s.gamepad);
@@ -157,12 +171,13 @@ function updateUI(moving) {
   batteryLight.scale.x=Math.max(.01,battery/100);
   batteryLight.position.x=-.62 - (batteryLight.userData.fullWidth*(1-battery/100))/2;
   batteryLight.material.color.setHSL(Math.max(0,battery/100)*.16,.9,.55);
-  if (dynamoHeld || desktopCharging) message.textContent='Крутите динамо-машину, чтобы зарядить батарею.';
+  if (dynamoHeld || desktopCharging) message.textContent='Двигайте ручку динамо по кругу, чтобы зарядить батарею.';
   else if (rightHeld || leftHeld) message.textContent=moving?'Батискаф движется. Энергия расходуется.':'Рычаг удерживается. Используйте стик.';
-  else message.textContent='Возьмитесь за рычаги триггером. Правая рука — ход, левая — глубина и поворот.';
+  else message.textContent='Наведите контроллер на рычаг и нажмите стик большим пальцем.';
 }
 function animate() {
   const dt=Math.min(clock.getDelta(),.05); const t=clock.elapsedTime;
+  updateThumbGrabs();
   dust.position.y = Math.sin(t*.2)*.08;
   let moveX=0,moveZ=0,moveY=0,turn=0;
   if(rightHeld){ const [x,y]=stick('right'); moveX=x; moveZ=y; }
