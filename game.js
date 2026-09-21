@@ -85,10 +85,12 @@ const cabin = new THREE.Group(); player.add(cabin);
 cabin.scale.setScalar(.55);
 cabin.position.y=.3;
 const yellow = 0xc68122, darkYellow = 0x5b3510;
-box(cabin,[6,.16,6],[0,-.05,-1.5],darkYellow);
-box(cabin,[6,.16,6],[0,3.4,-1.5],darkYellow);
-box(cabin,[.16,3.6,6],[-3,1.7,-1.5],yellow);
-box(cabin,[.16,3.6,6],[3,1.7,-1.5],yellow);
+// Curved spherical pressure hull. The missing front wedge is closed by the porthole bulkhead below.
+const hull = new THREE.Mesh(
+  new THREE.SphereGeometry(2.35, 48, 28, 5.32, 5.08),
+  material(yellow, .72, .08)
+);
+hull.position.y=1.7; hull.material.side=THREE.BackSide; cabin.add(hull);
 // front wall with circular porthole hole
 const wall = new THREE.Shape(); wall.moveTo(-3,-.1); wall.lineTo(3,-.1); wall.lineTo(3,3.4); wall.lineTo(-3,3.4); wall.closePath();
 const hole = new THREE.Path(); hole.absarc(0,1.7,1.18,0,Math.PI*2,true); wall.holes.push(hole);
@@ -101,28 +103,20 @@ for (const pos of [[-2.3,2.85,-1.5],[2.3,2.85,-1.5],[-2.4,1.2,.2],[2.4,1.2,.2]])
   const bulb = new THREE.Mesh(new THREE.SphereGeometry(.12,12,8), new THREE.MeshStandardMaterial({color:0xffbd4d,emissive:0xff8a18,emissiveIntensity:2})); bulb.position.set(...pos); cabin.add(bulb);
   const l = new THREE.PointLight(0xffa834,2.1,5,2); l.position.set(...pos); cabin.add(l);
 }
-// main console
-box(cabin,[2.1,.7,.75],[0,.65,-1.35],0x382613);
-const panel = new THREE.Mesh(new THREE.PlaneGeometry(1.75,.44), new THREE.MeshBasicMaterial({map:label('БАТАРЕЯ',400,70)})); panel.position.set(0,1.05,-1.72); cabin.add(panel);
-const batteryLight = new THREE.Mesh(new THREE.BoxGeometry(1.25,.055,.025), new THREE.MeshBasicMaterial({color:0xffd25c}));
-batteryLight.position.set(-.62,.94,-1.735); batteryLight.userData.fullWidth=1.25; cabin.add(batteryLight);
-
 const interactables = [];
 function makeLever(name, position, side) {
   const g = new THREE.Group(); g.position.set(...position); cabin.add(g);
   const base = new THREE.Mesh(new THREE.CylinderGeometry(.18,.24,.12,20),material(0x263235,.5,.5)); g.add(base);
   const arm = new THREE.Group(); arm.position.y=.06; g.add(arm);
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(.045,.055,.62,12),material(0x1a2020,.4,.7)); rod.position.y=.28; arm.add(rod);
-  const grip = new THREE.Mesh(new THREE.SphereGeometry(.12,16,12),material(0xc84e27,.55,.2)); grip.position.y=.61; arm.add(grip);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(.052,.065,1.5,12),material(0x1a2020,.4,.7)); rod.position.y=.75; arm.add(rod);
+  const grip = new THREE.Mesh(new THREE.SphereGeometry(.14,16,12),material(0xc84e27,.55,.2)); grip.position.y=1.55; arm.add(grip);
   grip.userData = { kind:'lever', side, arm, name }; interactables.push(grip); return grip;
 }
-const rightLever = makeLever('ХОД',[-.7,.98,-.82],'right');
-const leftLever = makeLever('ГЛУБИНА', [.7,.98,-.82],'left');
-const rl = new THREE.Mesh(new THREE.PlaneGeometry(.52,.12),new THREE.MeshBasicMaterial({map:label('ХОД',160,44)})); rl.position.set(-.7,.68,-1.12); cabin.add(rl);
-const ll = new THREE.Mesh(new THREE.PlaneGeometry(.7,.12),new THREE.MeshBasicMaterial({map:label('ГЛУБИНА',220,44)})); ll.position.set(.7,.68,-1.12); cabin.add(ll);
+const rightLever = makeLever('ХОД',[-.78,.06,-1.15],'right');
+const leftLever = makeLever('ГЛУБИНА', [.78,.06,-1.15],'left');
 
 // Dynamo is deliberately on the right: rotate your head/body to reach it.
-const dynamo = new THREE.Group(); dynamo.position.set(2.05,1.15,-.1); dynamo.rotation.y=-.75; cabin.add(dynamo);
+const dynamo = new THREE.Group(); dynamo.position.set(1.18,1.42,-.95); cabin.add(dynamo);
 box(dynamo,[.52,.62,.38],[0,0,0],0x314044);
 const axle = new THREE.Group(); axle.position.set(0,.05,-.33); dynamo.add(axle);
 const wheel = new THREE.Mesh(new THREE.TorusGeometry(.37,.05,10,24),material(0x8d9590,.35,.65)); axle.add(wheel);
@@ -143,7 +137,15 @@ function attachController(index) {
 attachController(0); attachController(1);
 function select(controller) {
   tempMatrix.identity().extractRotation(controller.matrixWorld); raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld); raycaster.ray.direction.set(0,0,-1).applyMatrix4(tempMatrix);
-  const hit=raycaster.intersectObjects(interactables,false)[0];
+  let hit=raycaster.intersectObjects(interactables,false)[0];
+  // Seated VR is more comfortable with a generous reach volume than precision ray targeting.
+  const hand=controller.getWorldPosition(new THREE.Vector3());
+  let nearest=null, nearestDistance=.62;
+  for (const object of interactables) {
+    const distance=hand.distanceTo(object.getWorldPosition(new THREE.Vector3()));
+    if (distance<nearestDistance) { nearest={object}; nearestDistance=distance; }
+  }
+  if (nearest) hit=nearest;
   if (!hit) return;
   controller.userData.held=hit.object.userData.kind;
   controller.userData.heldSide=hit.object.userData.side;
@@ -153,8 +155,9 @@ function select(controller) {
 function release(controller) { const held=controller.userData.held; if(held==='lever'){ if(controller.userData.heldSide==='right')rightHeld=false; else leftHeld=false; } if(held==='dynamo'){dynamoHeld=false; dynamoController=null; previousCrankAngle=null;} controller.userData.held=null; }
 function updateThumbGrabs() {
   for (const controller of controllerList) {
-    const button=controller.userData.inputSource?.gamepad?.buttons?.[3];
-    const pressed=Boolean(button?.pressed);
+    const buttons=controller.userData.inputSource?.gamepad?.buttons || [];
+    // [3] is the standard thumbstick click. Extra thumb buttons are accepted as a Quest-friendly fallback.
+    const pressed=[3,4,5].some(index => Boolean(buttons[index]?.pressed));
     if (pressed && !controller.userData.thumbWasPressed) select(controller);
     if (!pressed && controller.userData.thumbWasPressed) release(controller);
     controller.userData.thumbWasPressed=pressed;
@@ -168,9 +171,6 @@ function stick(hand) {
 
 function updateUI(moving) {
   chargeEl.style.width=`${battery}%`; chargeValue.textContent=`${Math.round(battery)}%`;
-  batteryLight.scale.x=Math.max(.01,battery/100);
-  batteryLight.position.x=-.62 - (batteryLight.userData.fullWidth*(1-battery/100))/2;
-  batteryLight.material.color.setHSL(Math.max(0,battery/100)*.16,.9,.55);
   if (dynamoHeld || desktopCharging) message.textContent='Двигайте ручку динамо по кругу, чтобы зарядить батарею.';
   else if (rightHeld || leftHeld) message.textContent=moving?'Батискаф движется. Энергия расходуется.':'Рычаг удерживается. Используйте стик.';
   else message.textContent='Наведите контроллер на рычаг и нажмите стик большим пальцем.';
