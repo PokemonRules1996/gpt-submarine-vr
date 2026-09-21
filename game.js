@@ -85,12 +85,12 @@ const cabin = new THREE.Group(); player.add(cabin);
 cabin.scale.setScalar(.55);
 cabin.position.y=.3;
 const yellow = 0xc68122, darkYellow = 0x5b3510;
-// Curved spherical pressure hull. The missing front wedge is closed by the porthole bulkhead below.
-const hull = new THREE.Mesh(
-  new THREE.SphereGeometry(2.35, 48, 28, 5.32, 5.08),
-  material(yellow, .72, .08)
-);
-hull.position.y=1.7; hull.material.side=THREE.BackSide; cabin.add(hull);
+// Fully enclosed rectangular pressure cabin. The only opening is the round porthole below.
+box(cabin,[6,.16,6],[0,-.05,-1.5],darkYellow);
+box(cabin,[6,.16,6],[0,3.4,-1.5],darkYellow);
+box(cabin,[.16,3.6,6],[-3,1.7,-1.5],yellow);
+box(cabin,[.16,3.6,6],[3,1.7,-1.5],yellow);
+box(cabin,[6,3.6,.16],[0,1.7,1.5],yellow);
 // front wall with circular porthole hole
 const wall = new THREE.Shape(); wall.moveTo(-3,-.1); wall.lineTo(3,-.1); wall.lineTo(3,3.4); wall.lineTo(-3,3.4); wall.closePath();
 const hole = new THREE.Path(); hole.absarc(0,1.7,1.18,0,Math.PI*2,true); wall.holes.push(hole);
@@ -118,11 +118,12 @@ const leftLever = makeLever('ГЛУБИНА', [.78,.06,-1.15],'left');
 // Dynamo is deliberately on the right: rotate your head/body to reach it.
 const dynamo = new THREE.Group(); dynamo.position.set(1.18,1.42,-.95); cabin.add(dynamo);
 box(dynamo,[.52,.62,.38],[0,0,0],0x314044);
-const axle = new THREE.Group(); axle.position.set(0,.05,-.33); dynamo.add(axle);
+// The wheel is mounted on the face aimed at the seated player, not on the far side of the casing.
+const axle = new THREE.Group(); axle.position.set(0,.05,.33); dynamo.add(axle);
 const wheel = new THREE.Mesh(new THREE.TorusGeometry(.37,.05,10,24),material(0x8d9590,.35,.65)); axle.add(wheel);
 for(let i=0;i<4;i++){ const spoke=box(axle,[.06,.62,.05],[0,0,0],0x8d9590); spoke.rotation.z=i*Math.PI/2; }
 const crank = box(axle,[.35,.05,.05],[.28,-.2,0],0xc84e27); crank.userData={kind:'dynamo',axle}; interactables.push(crank);
-const dynLabel = new THREE.Mesh(new THREE.PlaneGeometry(.82,.18),new THREE.MeshBasicMaterial({map:label('ДИНАМО',256,56)})); dynLabel.position.set(0,.52,-.23); dynamo.add(dynLabel);
+const dynLabel = new THREE.Mesh(new THREE.PlaneGeometry(.82,.18),new THREE.MeshBasicMaterial({map:label('ДИНАМО',256,56)})); dynLabel.position.set(0,.52,.23); dynamo.add(dynLabel);
 
 const raycaster = new THREE.Raycaster();
 const tempMatrix = new THREE.Matrix4();
@@ -156,11 +157,16 @@ function release(controller) { const held=controller.userData.held; if(held==='l
 function updateThumbGrabs() {
   for (const controller of controllerList) {
     const buttons=controller.userData.inputSource?.gamepad?.buttons || [];
-    // [3] is the standard thumbstick click. Extra thumb buttons are accepted as a Quest-friendly fallback.
-    const pressed=[3,4,5].some(index => Boolean(buttons[index]?.pressed));
-    if (pressed && !controller.userData.thumbWasPressed) select(controller);
-    if (!pressed && controller.userData.thumbWasPressed) release(controller);
-    controller.userData.thumbWasPressed=pressed;
+    // [3] is the standard thumbstick click. Other thumb-operated buttons work as a fallback.
+    const thumbPressed=buttons.slice(2).some(button => Boolean(button?.pressed));
+    const axes=controller.userData.inputSource?.gamepad?.axes || [];
+    const stickMoved=Math.hypot(axes[axes.length-2]||0, axes[axes.length-1]||0)>.28;
+    const engaged=thumbPressed || stickMoved;
+    // If a hand is near a control, moving or pressing its thumbstick picks it up. This is
+    // intentionally forgiving for a seated experience and avoids unreliable laser precision.
+    if (engaged && !controller.userData.held) select(controller);
+    if (!engaged && controller.userData.held) release(controller);
+    controller.userData.thumbWasPressed=thumbPressed;
   }
 }
 function stick(hand) {
