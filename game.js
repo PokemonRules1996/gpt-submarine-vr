@@ -112,8 +112,9 @@ function makeLever(name, position, side) {
   const grip = new THREE.Mesh(new THREE.SphereGeometry(.14,16,12),material(0xc84e27,.55,.2)); grip.position.y=1.55; arm.add(grip);
   grip.userData = { kind:'lever', side, arm, name }; interactables.push(grip); return grip;
 }
-const rightLever = makeLever('ХОД',[-.78,.06,-1.15],'right');
-const leftLever = makeLever('ГЛУБИНА', [.78,.06,-1.15],'left');
+// +X is the player's right when looking through the forward porthole.
+const rightLever = makeLever('ХОД',[.78,.06,-1.15],'right');
+const leftLever = makeLever('ГЛУБИНА', [-.78,.06,-1.15],'left');
 
 // Dynamo is deliberately on the right: rotate your head/body to reach it.
 const dynamo = new THREE.Group(); dynamo.position.set(1.18,1.42,-.95); cabin.add(dynamo);
@@ -121,8 +122,14 @@ box(dynamo,[.52,.62,.38],[0,0,0],0x314044);
 // The wheel is mounted on the face aimed at the seated player, not on the far side of the casing.
 const axle = new THREE.Group(); axle.position.set(0,.05,.33); dynamo.add(axle);
 const wheel = new THREE.Mesh(new THREE.TorusGeometry(.37,.05,10,24),material(0x8d9590,.35,.65)); axle.add(wheel);
+// A transparent, wide hit surface makes every part of the wheel a valid grab point.
+const wheelGrab = new THREE.Mesh(
+  new THREE.CircleGeometry(.48, 32),
+  new THREE.MeshBasicMaterial({transparent:true, opacity:.015, depthWrite:false})
+);
+wheelGrab.position.z=.025; wheelGrab.userData={kind:'dynamo',axle}; axle.add(wheelGrab); interactables.push(wheelGrab);
 for(let i=0;i<4;i++){ const spoke=box(axle,[.06,.62,.05],[0,0,0],0x8d9590); spoke.rotation.z=i*Math.PI/2; }
-const crank = box(axle,[.35,.05,.05],[.28,-.2,0],0xc84e27); crank.userData={kind:'dynamo',axle}; interactables.push(crank);
+const crank = box(axle,[.35,.05,.05],[.28,-.2,.03],0xc84e27);
 const dynLabel = new THREE.Mesh(new THREE.PlaneGeometry(.82,.18),new THREE.MeshBasicMaterial({map:label('ДИНАМО',256,56)})); dynLabel.position.set(0,.52,.23); dynamo.add(dynLabel);
 
 const raycaster = new THREE.Raycaster();
@@ -130,7 +137,7 @@ const tempMatrix = new THREE.Matrix4();
 const controllers = {};
 const controllerList = [];
 function attachController(index) {
-  const c = renderer.xr.getController(index); c.userData.hand=''; controllerList.push(c); scene.add(c);
+  const c = renderer.xr.getController(index); c.userData.hand=''; controllerList.push(c); player.add(c);
   const ray = new THREE.Line(new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0,0,0),new THREE.Vector3(0,0,-3)]),new THREE.LineBasicMaterial({color:0xffd382})); ray.name='ray'; ray.scale.z=.6; c.add(ray);
   c.addEventListener('connected', event => { c.userData.hand=event.data.handedness; c.userData.inputSource=event.data; controllers[event.data.handedness]=c; });
   c.addEventListener('disconnected', () => { release(c); c.userData.inputSource=null; });
