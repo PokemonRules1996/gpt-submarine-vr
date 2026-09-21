@@ -175,15 +175,9 @@ function updateThumbGrabs() {
     const buttons=controller.userData.inputSource?.gamepad?.buttons || [];
     // [3] is the standard thumbstick click. Other thumb-operated buttons work as a fallback.
     const thumbPressed=buttons.slice(2).some(button => Boolean(button?.pressed || button?.value > .5));
-    const axes=controller.userData.inputSource?.gamepad?.axes || [];
-    const stickMoved=Math.hypot(axes[axes.length-2]||0, axes[axes.length-1]||0)>.28;
-    const engaged=thumbPressed || stickMoved;
-    // If a hand is near a control, moving or pressing its thumbstick picks it up. This is
-    // intentionally forgiving for a seated experience and avoids unreliable laser precision.
+    // A control is never auto-grabbed: each hand must hold its own thumb button.
     if (!controller.userData.held && thumbPressed) select(controller, true);
-    else if (!controller.userData.held && stickMoved) select(controller, false);
-    const mustKeepHolding=controller.userData.held === 'dynamo' ? thumbPressed : engaged;
-    if (!mustKeepHolding && controller.userData.held) release(controller);
+    if (!thumbPressed && controller.userData.held) release(controller);
     controller.userData.thumbWasPressed=thumbPressed;
   }
 }
