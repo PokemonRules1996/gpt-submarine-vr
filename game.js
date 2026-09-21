@@ -100,24 +100,24 @@ const glass = new THREE.Mesh(new THREE.CircleGeometry(1.13,40), new THREE.MeshPh
 
 // warm practical lamps
 for (const pos of [[-2.3,2.85,-1.5],[2.3,2.85,-1.5],[-2.4,1.2,.2],[2.4,1.2,.2]]) {
-  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.12,12,8), new THREE.MeshStandardMaterial({color:0xffbd4d,emissive:0xff8a18,emissiveIntensity:2})); bulb.position.set(...pos); cabin.add(bulb);
-  const l = new THREE.PointLight(0xffa834,2.1,5,2); l.position.set(...pos); cabin.add(l);
+  const bulb = new THREE.Mesh(new THREE.SphereGeometry(.12,12,8), new THREE.MeshStandardMaterial({color:0xffbd4d,emissive:0xff8a18,emissiveIntensity:1})); bulb.position.set(...pos); cabin.add(bulb);
+  const l = new THREE.PointLight(0xffa834,1.05,5,2); l.position.set(...pos); cabin.add(l);
 }
 const interactables = [];
 function makeLever(name, position, side) {
   const g = new THREE.Group(); g.position.set(...position); cabin.add(g);
   const base = new THREE.Mesh(new THREE.CylinderGeometry(.18,.24,.12,20),material(0x263235,.5,.5)); g.add(base);
   const arm = new THREE.Group(); arm.position.y=.06; g.add(arm);
-  const rod = new THREE.Mesh(new THREE.CylinderGeometry(.052,.065,1.5,12),material(0x1a2020,.4,.7)); rod.position.y=.75; arm.add(rod);
-  const grip = new THREE.Mesh(new THREE.SphereGeometry(.14,16,12),material(0xc84e27,.55,.2)); grip.position.y=1.55; arm.add(grip);
+  const rod = new THREE.Mesh(new THREE.CylinderGeometry(.052,.065,.75,12),material(0x1a2020,.4,.7)); rod.position.y=.375; arm.add(rod);
+  const grip = new THREE.Mesh(new THREE.SphereGeometry(.14,16,12),material(0xc84e27,.55,.2)); grip.position.y=.8; arm.add(grip);
   grip.userData = { kind:'lever', side, arm, name }; interactables.push(grip); return grip;
 }
 // +X is the player's right when looking through the forward porthole.
 const rightLever = makeLever('ХОД',[.78,.06,-1.15],'right');
 const leftLever = makeLever('ГЛУБИНА', [-.78,.06,-1.15],'left');
 
-// Dynamo is deliberately on the right: rotate your head/body to reach it.
-const dynamo = new THREE.Group(); dynamo.position.set(1.18,1.42,-.95); cabin.add(dynamo);
+// Parked beside the right shoulder. Turning right in the seat presents the wheel face-on.
+const dynamo = new THREE.Group(); dynamo.position.set(1.65,1.45,-.05); dynamo.rotation.y=-Math.PI/2; cabin.add(dynamo);
 box(dynamo,[.52,.62,.38],[0,0,0],0x314044);
 // The wheel is mounted on the face aimed at the seated player, not on the far side of the casing.
 const axle = new THREE.Group(); axle.position.set(0,.05,.33); dynamo.add(axle);
@@ -132,6 +132,14 @@ for(let i=0;i<4;i++){ const spoke=box(axle,[.06,.62,.05],[0,0,0],0x8d9590); spok
 const crank = box(axle,[.35,.05,.05],[.28,-.2,.03],0xc84e27);
 const dynLabel = new THREE.Mesh(new THREE.PlaneGeometry(.82,.18),new THREE.MeshBasicMaterial({map:label('ДИНАМО',256,56)})); dynLabel.position.set(0,.52,.23); dynamo.add(dynLabel);
 
+// A small, low status strip: kept below the porthole so it never covers the view.
+const energyLabel = new THREE.Mesh(new THREE.PlaneGeometry(.72,.13),new THREE.MeshBasicMaterial({map:label('ЭНЕРГИЯ',220,48)}));
+energyLabel.position.set(0,.34,-2.215); cabin.add(energyLabel);
+const energyBack = new THREE.Mesh(new THREE.PlaneGeometry(1.18,.1),new THREE.MeshBasicMaterial({color:0x221607}));
+energyBack.position.set(0,.17,-2.215); cabin.add(energyBack);
+const energyFill = new THREE.Mesh(new THREE.PlaneGeometry(1.08,.06),new THREE.MeshBasicMaterial({color:0xffcf56}));
+energyFill.position.set(0,.17,-2.22); energyFill.userData.fullWidth=1.08; cabin.add(energyFill);
+
 const raycaster = new THREE.Raycaster();
 const tempMatrix = new THREE.Matrix4();
 const controllers = {};
@@ -143,13 +151,14 @@ function attachController(index) {
   c.addEventListener('disconnected', () => { release(c); c.userData.inputSource=null; });
 }
 attachController(0); attachController(1);
-function select(controller) {
+function select(controller, includeDynamo = true) {
   tempMatrix.identity().extractRotation(controller.matrixWorld); raycaster.ray.origin.setFromMatrixPosition(controller.matrixWorld); raycaster.ray.direction.set(0,0,-1).applyMatrix4(tempMatrix);
-  let hit=raycaster.intersectObjects(interactables,false)[0];
+  const candidates=includeDynamo ? interactables : interactables.filter(object => object.userData.kind !== 'dynamo');
+  let hit=raycaster.intersectObjects(candidates,false)[0];
   // Seated VR is more comfortable with a generous reach volume than precision ray targeting.
   const hand=controller.getWorldPosition(new THREE.Vector3());
   let nearest=null, nearestDistance=.62;
-  for (const object of interactables) {
+  for (const object of candidates) {
     const distance=hand.distanceTo(object.getWorldPosition(new THREE.Vector3()));
     if (distance<nearestDistance) { nearest={object}; nearestDistance=distance; }
   }
@@ -165,14 +174,16 @@ function updateThumbGrabs() {
   for (const controller of controllerList) {
     const buttons=controller.userData.inputSource?.gamepad?.buttons || [];
     // [3] is the standard thumbstick click. Other thumb-operated buttons work as a fallback.
-    const thumbPressed=buttons.slice(2).some(button => Boolean(button?.pressed));
+    const thumbPressed=buttons.slice(2).some(button => Boolean(button?.pressed || button?.value > .5));
     const axes=controller.userData.inputSource?.gamepad?.axes || [];
     const stickMoved=Math.hypot(axes[axes.length-2]||0, axes[axes.length-1]||0)>.28;
     const engaged=thumbPressed || stickMoved;
     // If a hand is near a control, moving or pressing its thumbstick picks it up. This is
     // intentionally forgiving for a seated experience and avoids unreliable laser precision.
-    if (engaged && !controller.userData.held) select(controller);
-    if (!engaged && controller.userData.held) release(controller);
+    if (!controller.userData.held && thumbPressed) select(controller, true);
+    else if (!controller.userData.held && stickMoved) select(controller, false);
+    const mustKeepHolding=controller.userData.held === 'dynamo' ? thumbPressed : engaged;
+    if (!mustKeepHolding && controller.userData.held) release(controller);
     controller.userData.thumbWasPressed=thumbPressed;
   }
 }
@@ -184,6 +195,10 @@ function stick(hand) {
 
 function updateUI(moving) {
   chargeEl.style.width=`${battery}%`; chargeValue.textContent=`${Math.round(battery)}%`;
+  const amount=Math.max(.01,battery/100);
+  energyFill.scale.x=amount;
+  energyFill.position.x=-(energyFill.userData.fullWidth*(1-amount))/2;
+  energyFill.material.color.setHSL(amount*.16,.9,.55);
   if (dynamoHeld || desktopCharging) message.textContent='Двигайте ручку динамо по кругу, чтобы зарядить батарею.';
   else if (rightHeld || leftHeld) message.textContent=moving?'Батискаф движется. Энергия расходуется.':'Рычаг удерживается. Используйте стик.';
   else message.textContent='Наведите контроллер на рычаг и нажмите стик большим пальцем.';
@@ -219,8 +234,11 @@ function animate() {
   if(charging && battery<100){ recharge+=generated || dt*4.5; battery=Math.min(100,battery+(generated || dt*4.5)); }
   else axle.rotation.z=Math.sin(t*1.2)*.03;
   const [rx,ry]=stick('right'); const [lx,ly]=stick('left');
-  rightLever.userData.arm.rotation.z=rightHeld ? -ry*.32 : 0;
-  leftLever.userData.arm.rotation.z=leftHeld ? -ly*.32 : 0;
+  // Both stick axes physically deflect the matching floor lever.
+  rightLever.userData.arm.rotation.z=rightHeld ? -rx*.32 : 0;
+  rightLever.userData.arm.rotation.x=rightHeld ? ry*.32 : 0;
+  leftLever.userData.arm.rotation.z=leftHeld ? -lx*.32 : 0;
+  leftLever.userData.arm.rotation.x=leftHeld ? ly*.32 : 0;
   updateUI(moving);
   renderer.render(scene,camera);
 }
